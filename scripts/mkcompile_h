@@ -19,9 +19,15 @@ fi
 LD_VERSION=$(LC_ALL=C $LD -v | head -n1 |
 		sed -e 's/(compatible with [^)]*)//' -e 's/[[:space:]]*$//')
 
+if [ -z "${KBUILD_COMPILER_STRING}" ]; then
+	LINUX_COMPILER_CUSTOM="${CC_VERSION}, ${LD_VERSION}"
+else
+	LINUX_COMPILER_CUSTOM="${KBUILD_COMPILER_STRING}"
+fi
+
 cat <<EOF
 #define UTS_MACHINE		"${UTS_MACHINE}"
 #define LINUX_COMPILE_BY	"${LINUX_COMPILE_BY}"
 #define LINUX_COMPILE_HOST	"${LINUX_COMPILE_HOST}"
-#define LINUX_COMPILER		"${CC_VERSION}, ${LD_VERSION}"
+#define LINUX_COMPILER		"${LINUX_COMPILER_CUSTOM}"
 EOF

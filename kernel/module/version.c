@@ -52,7 +52,7 @@ int check_version(const struct load_info *info,
 
 bad_version:
 	pr_warn("%s: disagrees about version of symbol %s\n", info->name, symname);
-	return 0;
+	return 1;
 }
 
 int check_modstruct_version(const struct load_info *info,

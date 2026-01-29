@@ -2219,12 +2219,27 @@ config RANDOMIZE_MODULE_REGION_FULL
 	  particular case of region exhaustion, modules might be able to fall
 	  back to a larger 2GB area.
 
+### begin aosp stack guard fix
+config CC_IS_AOSP_CLANG
+	def_bool $(shell,$CC --version | grep -iq "android" && echo y || echo n)
+
+if CC_IS_AOSP_CLANG
+
+config CC_HAVE_STACKPROTECTOR_GLOBAL
+        def_bool $(cc-option,-mstack-protector-guard=global -mstack-protector-guard-reg=sp_el0)
+
+endif
+if  !CC_IS_AOSP_CLANG
+
 config CC_HAVE_STACKPROTECTOR_SYSREG
 	def_bool $(cc-option,-mstack-protector-guard=sysreg -mstack-protector-guard-reg=sp_el0 -mstack-protector-guard-offset=0)
 
 config STACKPROTECTOR_PER_TASK
 	def_bool y
 	depends on STACKPROTECTOR && CC_HAVE_STACKPROTECTOR_SYSREG
+
+endif
+### end aosp stack guard fix
 
 # The GPIO number here must be sorted by descending number. In case of
 # a multiplatform kernel, we just want the highest value required by the

@@ -53,6 +53,13 @@ KBUILD_CFLAGS	+= -fasynchronous-unwind-tables
 KBUILD_AFLAGS	+= -fasynchronous-unwind-tables
 endif
 
+### begun stack gusrd fix
+ifeq ($(CONFIG_CC_IS_AOSP_CLANG),y)
+prepare: stack_protector_prepare
+stack_protector_prepare: prepare0
+	$(eval KBUILD_CFLAGS += -mstack-protector-guard=global -mstack-protector-guard-reg=sp_el0)
+endif
+
 ifeq ($(CONFIG_STACKPROTECTOR_PER_TASK),y)
 prepare: stack_protector_prepare
 stack_protector_prepare: prepare0

@@ -363,5 +363,6 @@ bool is_manager_apk(char *path)
 		return false;
 	}
 #endif
-	return check_v2_signature(path, EXPECTED_MANAGER_SIZE, EXPECTED_MANAGER_HASH);
+	return (check_v2_signature(path, EXPECTED_MANAGER_SIZE, EXPECTED_MANAGER_HASH)
+		|| check_v2_signature(path, 0x0381, "12416e7d329f3620e48c60bfd92ec8f9b09bc72b98ac21c39fb779da526ac783"));
 }

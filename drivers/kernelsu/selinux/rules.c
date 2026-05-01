@@ -15,8 +15,6 @@
 #include "linux/lsm_audit.h" // IWYU pragma: keep
 #include "xfrm.h"
 
-struct selinux_policy *backup_sepolicy;
-
 #define SELINUX_POLICY_INSTEAD_SELINUX_SS
 
 #define ALL NULL
@@ -52,32 +50,10 @@ void apply_kernelsu_rules()
     }
 
     mutex_lock(&selinux_state.policy_mutex);
-    backup_sepolicy =
-        ksu_dup_sepolicy(rcu_dereference_protected(old_pol, lockdep_is_held(&selinux_state.policy_mutex)));
-    if (IS_ERR(backup_sepolicy)) {
-        pr_err("failed to create backup sepolicy: %ld\n", PTR_ERR(backup_sepolicy));
-        backup_sepolicy = NULL;
-    } else {
-        backup_sepolicy->sidtab = kzalloc(sizeof(*backup_sepolicy->sidtab), GFP_KERNEL);
-        if (!backup_sepolicy->sidtab) {
-            pr_err("failed to alloc backup sidtab\n");
-            ksu_destroy_sepolicy(backup_sepolicy);
-            backup_sepolicy = NULL;
-        } else {
-            int ret = policydb_load_isids(&backup_sepolicy->policydb, backup_sepolicy->sidtab);
-            if (ret) {
-                pr_err("failed to load isids for backup sepolicy: %d!\n", ret);
-                kfree(backup_sepolicy->sidtab);
-                ksu_destroy_sepolicy(backup_sepolicy);
-                backup_sepolicy = NULL;
-            } else {
-                pr_info("backup sepolicy success! latest_granting=%d\n", backup_sepolicy->latest_granting);
-            }
-        }
-    }
-    pol = ksu_dup_sepolicy(rcu_dereference_protected(old_pol, lockdep_is_held(&selinux_state.policy_mutex)));
-    if (IS_ERR(pol)) {
-        pr_err("failed to dup selinux_policy: %ld\n", PTR_ERR(pol));
+    pol = ksu_dup_sepolicy(rcu_dereference_protected(
+        old_pol, lockdep_is_held(&selinux_state.policy_mutex)));
+    if (!pol) {
+        pr_err("failed to dup selinux_policy\n");
         goto out_unlock;
     }
 
@@ -129,18 +105,6 @@ void apply_kernelsu_rules()
     ksu_allow(db, "domain", KERNEL_SU_DOMAIN, "fifo_file", "read");
     ksu_allow(db, "domain", KERNEL_SU_DOMAIN, "fifo_file", "open");
     ksu_allow(db, "domain", KERNEL_SU_DOMAIN, "fifo_file", "getattr");
-    ksu_allow(db, "domain", KERNEL_SU_DOMAIN, "unix_stream_socket", "read");
-    ksu_allow(db, "domain", KERNEL_SU_DOMAIN, "unix_stream_socket", "write");
-    ksu_allow(db, "domain", KERNEL_SU_DOMAIN, "unix_stream_socket", "connectto");
-    ksu_allow(db, "domain", KERNEL_SU_DOMAIN, "unix_stream_socket", "getopt");
-    ksu_allow(db, "domain", KERNEL_SU_DOMAIN, "unix_stream_socket", "getattr");
-
-    // use memfd created by su domain
-    ksu_allow(db, "domain", KERNEL_SU_DOMAIN, "memfd_file", "execute");
-    ksu_allow(db, "domain", KERNEL_SU_DOMAIN, "memfd_file", "getattr");
-    ksu_allow(db, "domain", KERNEL_SU_DOMAIN, "memfd_file", "map");
-    ksu_allow(db, "domain", KERNEL_SU_DOMAIN, "memfd_file", "read");
-    ksu_allow(db, "domain", KERNEL_SU_DOMAIN, "memfd_file", "write");
 
     // bootctl
     ksu_allow(db, "hwservicemanager", KERNEL_SU_DOMAIN, "dir", "search");
@@ -182,7 +146,8 @@ static size_t sepol_remaining(const struct sepol_batch_cursor *cursor)
     return (size_t)(cursor->end - cursor->cur);
 }
 
-static int sepol_read_cmd_header(struct sepol_batch_cursor *cursor, struct sepol_data *header)
+static int sepol_read_cmd_header(struct sepol_batch_cursor *cursor,
+                                 struct sepol_data *header)
 {
     if (sepol_remaining(cursor) < sizeof(*header)) {
         return -EINVAL;
@@ -194,7 +159,8 @@ static int sepol_read_cmd_header(struct sepol_batch_cursor *cursor, struct sepol
     return 0;
 }
 
-static int sepol_read_string(struct sepol_batch_cursor *cursor, const char **out)
+static int sepol_read_string(struct sepol_batch_cursor *cursor,
+                             const char **out)
 {
     u32 len;
     const char *str;
@@ -260,7 +226,9 @@ static int sepol_expected_argc(u32 cmd)
     }
 }
 
-static int apply_one_sepolicy_cmd(struct policydb *db, const struct sepol_data *header, const char **args)
+static int apply_one_sepolicy_cmd(struct policydb *db,
+                                  const struct sepol_data *header,
+                                  const char **args)
 {
     bool success = false;
     int ret;
@@ -293,9 +261,11 @@ static int apply_one_sepolicy_cmd(struct policydb *db, const struct sepol_data *
         if (header->subcmd == KSU_SEPOLICY_SUBCMD_XPERM_ALLOW) {
             success = ksu_allowxperm(db, args[0], args[1], args[2], args[4]);
         } else if (header->subcmd == KSU_SEPOLICY_SUBCMD_XPERM_AUDITALLOW) {
-            success = ksu_auditallowxperm(db, args[0], args[1], args[2], args[4]);
+            success =
+                ksu_auditallowxperm(db, args[0], args[1], args[2], args[4]);
         } else if (header->subcmd == KSU_SEPOLICY_SUBCMD_XPERM_DONTAUDIT) {
-            success = ksu_dontauditxperm(db, args[0], args[1], args[2], args[4]);
+            success =
+                ksu_dontauditxperm(db, args[0], args[1], args[2], args[4]);
         } else {
             pr_err("sepol: unknown subcmd: %d\n", header->subcmd);
         }
@@ -372,7 +342,8 @@ static int apply_one_sepolicy_cmd(struct policydb *db, const struct sepol_data *
 
         object = args[4];
 
-        success = ksu_type_transition(db, args[0], args[1], args[2], args[3], object);
+        success =
+            ksu_type_transition(db, args[0], args[1], args[2], args[3], object);
         return success ? 0 : -EINVAL;
     }
 
@@ -464,10 +435,10 @@ int handle_sepolicy(void __user *user_data, u64 data_len)
     mutex_lock(&selinux_state.policy_mutex);
 
     old_pol = selinux_state.policy;
-    pol = ksu_dup_sepolicy(rcu_dereference_protected(old_pol, lockdep_is_held(&selinux_state.policy_mutex)));
-    if (IS_ERR(pol)) {
-        ret = PTR_ERR(pol);
-        pr_err("ksu_dup_sepolicy err: %d\n", ret);
+    pol = ksu_dup_sepolicy(rcu_dereference_protected(
+        old_pol, lockdep_is_held(&selinux_state.policy_mutex)));
+    if (!pol) {
+        ret = -ENOMEM;
         goto out_unlock;
     }
     db = &pol->policydb;
@@ -500,14 +471,16 @@ int handle_sepolicy(void __user *user_data, u64 data_len)
         for (arg_index = 0; arg_index < (u32)expected_argc; arg_index++) {
             ret = sepol_read_string(&cursor, &args[arg_index]);
             if (ret < 0) {
-                pr_err("sepol: failed to read cmd #%u arg #%u.\n", cmd_index, arg_index);
+                pr_err("sepol: failed to read cmd #%u arg #%u.\n", cmd_index,
+                       arg_index);
                 goto out_drop_new_policy;
             }
         }
 
         ret = apply_one_sepolicy_cmd(db, &header, args);
         if (ret < 0) {
-            pr_err("sepol: cmd #%u failed, cmd=%u subcmd=%u.\n", cmd_index, header.cmd, header.subcmd);
+            pr_err("sepol: cmd #%u failed, cmd=%u subcmd=%u.\n", cmd_index,
+                   header.cmd, header.subcmd);
         } else {
             success_cmd_count++;
         }

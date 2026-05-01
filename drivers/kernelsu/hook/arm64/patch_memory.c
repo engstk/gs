@@ -2,7 +2,6 @@
 /*
  * Copyright (C) 2023 bmax121. All Rights Reserved.
  */
-
 #ifdef __aarch64__
 
 #include "../patch_memory.h"
@@ -34,12 +33,14 @@ unsigned long phys_from_virt(unsigned long addr, int *err)
     pgd = pgd_offset(mm, addr);
     if (pgd_none(*pgd) || pgd_bad(*pgd))
         goto fail;
-    pr_debug("pgd of 0x%lx p=0x%lx v=0x%lx", addr, (uintptr_t)pgd, (uintptr_t)pgd_val(*pgd));
+    pr_debug("pgd of 0x%lx p=0x%lx v=0x%lx", addr, (uintptr_t)pgd,
+             (uintptr_t)pgd_val(*pgd));
 
     p4d = p4d_offset(pgd, addr);
     if (p4d_none(*p4d) || p4d_bad(*p4d))
         goto fail;
-    pr_debug("p4d of 0x%lx p=0x%lx v=0x%lx", addr, (uintptr_t)p4d, (uintptr_t)p4d_val(*p4d));
+    pr_debug("p4d of 0x%lx p=0x%lx v=0x%lx", addr, (uintptr_t)p4d,
+             (uintptr_t)p4d_val(*p4d));
 #if defined(p4d_leaf)
     if (p4d_leaf(*p4d)) {
         pr_debug("Address 0x%lx maps to a P4D-level huge page\n", addr);
@@ -50,7 +51,8 @@ unsigned long phys_from_virt(unsigned long addr, int *err)
     pud = pud_offset(p4d, addr);
     if (pud_none(*pud) || pud_bad(*pud))
         goto fail;
-    pr_debug("pud of 0x%lx p=0x%lx v=0x%lx", addr, (uintptr_t)pud, (uintptr_t)pud_val(*pud));
+    pr_debug("pud of 0x%lx p=0x%lx v=0x%lx", addr, (uintptr_t)pud,
+             (uintptr_t)pud_val(*pud));
 #if defined(pud_leaf)
     if (pud_leaf(*pud)) {
         pr_debug("Address 0x%lx maps to a PUD-level huge page\n", addr);
@@ -59,7 +61,8 @@ unsigned long phys_from_virt(unsigned long addr, int *err)
 #endif
 
     pmd = pmd_offset(pud, addr);
-    pr_debug("pmd of 0x%lx p=0x%lx v=0x%lx", addr, (uintptr_t)pmd, (uintptr_t)pmd_val(*pmd));
+    pr_debug("pmd of 0x%lx p=0x%lx v=0x%lx", addr, (uintptr_t)pmd,
+             (uintptr_t)pmd_val(*pmd));
 #if defined(pmd_leaf)
     if (pmd_leaf(*pmd)) {
         pr_debug("Address 0x%lx maps to a PMD-level huge page\n", addr);
@@ -90,11 +93,11 @@ fail:
 // https://cs.android.com/android/_/android/kernel/common/+/6d9f07d8f1ffc310a6877153fe882f35ae380799
 // So we need to grep kernel source code to detect which one to use.
 #if KSU_NEW_DCACHE_FLUSH
-#define ksu_flush_dcache(start, sz)                                                                                    \
-    ({                                                                                                                 \
-        unsigned long __start = (start);                                                                               \
-        unsigned long __end = __start + (sz);                                                                          \
-        dcache_clean_inval_poc(__start, __end);                                                                        \
+#define ksu_flush_dcache(start, sz)                                            \
+    ({                                                                         \
+        unsigned long __start = (start);                                       \
+        unsigned long __end = __start + (sz);                                  \
+        dcache_clean_inval_poc(__start, __end);                                \
     })
 #define ksu_flush_icache(start, end) caches_clean_inval_pou
 #else
@@ -130,7 +133,8 @@ struct patch_text_info {
 // ^2: https://github.com/torvalds/linux/commit/c0eb315ad9719e41ce44708455cc69df7ac9f3f8
 static int ksu_patch_text_nosync(void *dst, void *src, size_t len, int flags)
 {
-    pr_debug("patch dst=0x%lx src=0x%lx len=%ld\n", (unsigned long)dst, (unsigned long)src, len);
+    pr_debug("patch dst=0x%lx src=0x%lx len=%ld\n", (unsigned long)dst,
+             (unsigned long)src, len);
 
     unsigned long p = (unsigned long)dst;
     int ret;
@@ -197,41 +201,6 @@ int ksu_patch_text(void *dst, void *src, size_t len, int flags)
     };
 
     return stop_machine(ksu_patch_text_cb, &info, cpu_online_mask);
-}
-
-/*
- * Scan the memory region [start, start+size) for a BL instruction whose
- * branch target equals `target`.  Returns the address of the first matching
- * instruction, or NULL if none is found.
- *
- * AArch64 BL encoding: bits[31:26] = 0b100101, bits[25:0] = imm26.
- * Branch target = PC + SignExtend(imm26, 26) * 4.
- */
-void *scan_call_to(void *start, size_t size, void *target)
-{
-    const uint32_t *insn = (const uint32_t *)start;
-    size_t count = size / sizeof(uint32_t);
-    size_t i;
-
-    for (i = 0; i < count; i++) {
-        int32_t imm26;
-        void *branch_target;
-
-        /* Check BL opcode: bits[31:26] == 0b100101 */
-        if ((insn[i] & 0xFC000000U) != 0x94000000U)
-            continue;
-
-        /* Sign-extend the 26-bit immediate to 32 bits */
-        imm26 = (int32_t)((insn[i] & 0x03FFFFFFU) << 6) >> 6;
-
-        /* Branch target = PC + imm26 * 4 */
-        branch_target = (void *)((uintptr_t)(&insn[i]) + ((int64_t)imm26 << 2));
-
-        if (branch_target == target)
-            return (void *)&insn[i];
-    }
-
-    return NULL;
 }
 
 #endif /* __aarch64__ */

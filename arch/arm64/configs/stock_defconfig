@@ -1,6 +1,6 @@
 #
 # Automatically generated file; DO NOT EDIT.
-# Linux/arm64 6.1.145 Kernel Configuration
+# Linux/arm64 6.1.157 Kernel Configuration
 #
 CONFIG_CC_VERSION_TEXT="Android (10087095, +pgo, +bolt, +lto, -mlgo, based on r487747c) clang version 17.0.2 (https://android.googlesource.com/toolchain/llvm-project d9f89f4d16663d5012e5c09495f3b30ece3d2362)"
 CONFIG_GCC_VERSION=0
@@ -36,7 +36,8 @@ CONFIG_BUILD_SALT=""
 CONFIG_DEFAULT_INIT=""
 CONFIG_DEFAULT_HOSTNAME="(none)"
 # CONFIG_SYSVIPC is not set
-# CONFIG_POSIX_MQUEUE is not set
+CONFIG_POSIX_MQUEUE=y
+CONFIG_POSIX_MQUEUE_SYSCTL=y
 # CONFIG_WATCH_QUEUE is not set
 CONFIG_CROSS_MEMORY_ATTACH=y
 # CONFIG_USELIB is not set
@@ -209,6 +210,7 @@ CONFIG_SOCK_CGROUP_DATA=y
 CONFIG_NAMESPACES=y
 CONFIG_UTS_NS=y
 CONFIG_TIME_NS=y
+CONFIG_IPC_NS=y
 # CONFIG_USER_NS is not set
 # CONFIG_PID_NS is not set
 CONFIG_NET_NS=y
@@ -3332,6 +3334,7 @@ CONFIG_HISI_THERMAL=y
 #
 # CONFIG_QCOM_SPMI_ADC_TM5 is not set
 # CONFIG_QCOM_SPMI_TEMP_ALARM is not set
+# CONFIG_QCOM_LMH is not set
 # end of Qualcomm thermal drivers
 
 CONFIG_WATCHDOG=y

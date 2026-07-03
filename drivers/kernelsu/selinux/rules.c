@@ -15,6 +15,8 @@
 #include "linux/lsm_audit.h" // IWYU pragma: keep
 #include "xfrm.h"
 
+struct selinux_policy *backup_sepolicy;
+
 #define SELINUX_POLICY_INSTEAD_SELINUX_SS
 
 #define ALL NULL
@@ -50,10 +52,33 @@ void apply_kernelsu_rules()
     }
 
     mutex_lock(&selinux_state.policy_mutex);
+    backup_sepolicy =
+        ksu_dup_sepolicy(rcu_dereference_protected(old_pol, lockdep_is_held(&selinux_state.policy_mutex)));
+    if (IS_ERR(backup_sepolicy)) {
+        pr_err("failed to create backup sepolicy: %ld\n", PTR_ERR(backup_sepolicy));
+        backup_sepolicy = NULL;
+    } else {
+        backup_sepolicy->sidtab = kzalloc(sizeof(*backup_sepolicy->sidtab), GFP_KERNEL);
+        if (!backup_sepolicy->sidtab) {
+            pr_err("failed to alloc backup sidtab\n");
+            ksu_destroy_sepolicy(backup_sepolicy);
+            backup_sepolicy = NULL;
+        } else {
+            int ret = policydb_load_isids(&backup_sepolicy->policydb, backup_sepolicy->sidtab);
+            if (ret) {
+                pr_err("failed to load isids for backup sepolicy: %d!\n", ret);
+                kfree(backup_sepolicy->sidtab);
+                ksu_destroy_sepolicy(backup_sepolicy);
+                backup_sepolicy = NULL;
+            } else {
+                pr_info("backup sepolicy success! latest_granting=%d\n", backup_sepolicy->latest_granting);
+            }
+        }
+    }
     pol = ksu_dup_sepolicy(rcu_dereference_protected(
         old_pol, lockdep_is_held(&selinux_state.policy_mutex)));
-    if (!pol) {
-        pr_err("failed to dup selinux_policy\n");
+    if (IS_ERR(pol)) {
+        pr_err("failed to dup selinux_policy: %ld\n", PTR_ERR(pol));
         goto out_unlock;
     }
 
@@ -105,6 +130,18 @@ void apply_kernelsu_rules()
     ksu_allow(db, "domain", KERNEL_SU_DOMAIN, "fifo_file", "read");
     ksu_allow(db, "domain", KERNEL_SU_DOMAIN, "fifo_file", "open");
     ksu_allow(db, "domain", KERNEL_SU_DOMAIN, "fifo_file", "getattr");
+    ksu_allow(db, "domain", KERNEL_SU_DOMAIN, "unix_stream_socket", "read");
+    ksu_allow(db, "domain", KERNEL_SU_DOMAIN, "unix_stream_socket", "write");
+    ksu_allow(db, "domain", KERNEL_SU_DOMAIN, "unix_stream_socket", "connectto");
+    ksu_allow(db, "domain", KERNEL_SU_DOMAIN, "unix_stream_socket", "getopt");
+    ksu_allow(db, "domain", KERNEL_SU_DOMAIN, "unix_stream_socket", "getattr");
+
+    // use memfd created by su domain
+    ksu_allow(db, "domain", KERNEL_SU_DOMAIN, "memfd_file", "execute");
+    ksu_allow(db, "domain", KERNEL_SU_DOMAIN, "memfd_file", "getattr");
+    ksu_allow(db, "domain", KERNEL_SU_DOMAIN, "memfd_file", "map");
+    ksu_allow(db, "domain", KERNEL_SU_DOMAIN, "memfd_file", "read");
+    ksu_allow(db, "domain", KERNEL_SU_DOMAIN, "memfd_file", "write");
 
     // bootctl
     ksu_allow(db, "hwservicemanager", KERNEL_SU_DOMAIN, "dir", "search");
@@ -437,8 +474,9 @@ int handle_sepolicy(void __user *user_data, u64 data_len)
     old_pol = selinux_state.policy;
     pol = ksu_dup_sepolicy(rcu_dereference_protected(
         old_pol, lockdep_is_held(&selinux_state.policy_mutex)));
-    if (!pol) {
-        ret = -ENOMEM;
+    if (IS_ERR(pol)) {
+        ret = PTR_ERR(pol);
+        pr_err("ksu_dup_sepolicy err: %d\n", ret);
         goto out_unlock;
     }
     db = &pol->policydb;

@@ -15,10 +15,11 @@
 #include "uapi/supercall.h"
 #include "supercall/internal.h"
 #include "arch.h"
+#include "util.h"
 #include "klog.h" // IWYU pragma: keep
 #include "manager/manager_identity.h"
 
-#include "tiny_sulog.h"
+#include "sulog/event.h"
 
 uint32_t ksuver_override = 0;
 
@@ -76,11 +77,7 @@ static void ksu_install_fd_tw_func(struct callback_head *cb)
     pr_info("[%d] install ksu fd: %d\n", current->pid, fd);
     if (copy_to_user(tw->outp, &fd, sizeof(fd))) {
         pr_err("install ksu fd reply err\n");
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 11, 0)
-        close_fd(fd);
-#else
-        ksys_close(fd);
-#endif
+        ksu_close_fd(fd);
     }
 
     kfree(tw);
@@ -132,7 +129,7 @@ static int reboot_handler_pre(struct kprobe *p, struct pt_regs *regs)
         if (current_uid().val != 0)
             return 0;
 
-        int ret = send_sulog_dump((void __user *)arg4);
+        int ret = ksu_sulog_handle_compat_dump((void __user *)arg4);
         if (ret)
             return 0;
 
@@ -245,8 +242,6 @@ void __init ksu_supercalls_init(void)
     } else {
         pr_info("reboot kprobe registered successfully\n");
     }
-
-    sulog_init_heap(); // grab heap memory
 }
 
 void __exit ksu_supercalls_exit(void)

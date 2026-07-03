@@ -13,6 +13,7 @@
 #include "manager/manager_observer.h"
 #include "manager/throne_tracker.h"
 #include "hook/syscall_hook_manager.h"
+#include "hook/lsm_hook.h"
 #include "runtime/ksud.h"
 #include "runtime/ksud_boot.h"
 #include "supercall/supercall.h"
@@ -20,6 +21,10 @@
 #include "infra/file_wrapper.h"
 #include "selinux/selinux.h"
 #include "hook/syscall_hook.h"
+#include "feature/adb_root.h"
+#include "feature/selinux_hide.h"
+#include "feature/sulog.h"
+#include "infra/symbol_resolver.h"
 
 #if defined(__x86_64__)
 #include <asm/cpufeature.h>
@@ -69,6 +74,16 @@ __attribute__((naked)) int __init kernelsu_init_early(void)
 struct cred *ksu_cred;
 bool ksu_late_loaded;
 
+#ifdef CONFIG_KSU_DEBUG
+bool allow_shell = true;
+#else
+bool allow_shell = false;
+#endif
+module_param(allow_shell, bool, 0);
+
+bool ksu_no_custom_rc = false;
+module_param_named(norc, ksu_no_custom_rc, bool, 0);
+
 int __init kernelsu_init(void)
 {
 #if defined(__x86_64__)
@@ -102,15 +117,28 @@ int __init kernelsu_init(void)
 	pr_alert("**     NOTICE NOTICE NOTICE NOTICE NOTICE NOTICE NOTICE    **");
 	pr_alert("*************************************************************");
 #endif
+	if (allow_shell) {
+		pr_alert("shell is allowed at init!");
+	}
 
-    ksu_cred = prepare_creds();
-    if (!ksu_cred) {
-        pr_err("prepare cred failed!\n");
-    }
+	ksu_cred = prepare_creds();
+	if (!ksu_cred) {
+		pr_err("prepare cred failed!\n");
+		return -ENOSYS;
+	}
 
+	ksu_init_symbol_resolver();
 	ksu_syscall_hook_init();
 
 	ksu_feature_init();
+
+	ksu_sulog_init();
+
+	ksu_adb_root_init();
+
+	ksu_lsm_hook_init();
+
+	ksu_selinux_hide_init();
 
 	ksu_supercalls_init();
 
@@ -183,11 +211,17 @@ void __exit kernelsu_exit(void)
 
 	ksu_allowlist_exit();
 
+	ksu_selinux_hide_exit();
+
+	ksu_lsm_hook_exit();
+
+	ksu_adb_root_exit();
+
+	ksu_sulog_exit();
+
 	ksu_feature_exit();
 
-	if (ksu_cred) {
-		put_cred(ksu_cred);
-	}
+	put_cred(ksu_cred);
 }
 
 #if NEED_OWN_STACKPROTECTOR

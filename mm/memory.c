@@ -79,6 +79,9 @@
 #include <linux/vmalloc.h>
 #include <linux/sched/sysctl.h>
 #include <linux/set_memory.h>
+#ifdef CONFIG_KSU_SUSFS_SUS_MAP
+#include <linux/susfs_def.h>
+#endif // #ifdef CONFIG_KSU_SUSFS_SUS_MAP
 
 #include <trace/events/kmem.h>
 #include <trace/hooks/mm.h>
@@ -5943,6 +5946,11 @@ int __access_remote_vm(struct mm_struct *mm, unsigned long addr, void *buf,
 		int bytes, ret, offset;
 		void *maddr;
 		struct page *page = NULL;
+
+#ifdef CONFIG_KSU_SUSFS_SUS_MAP
+		if (vma && vma->vm_file && SUSFS_IS_INODE_SUS_MAP(file_inode(vma->vm_file)))
+			break;
+#endif // #ifdef CONFIG_KSU_SUSFS_SUS_MAP
 
 		ret = get_user_pages_remote(mm, addr, 1,
 				gup_flags, &page, &vma, NULL);

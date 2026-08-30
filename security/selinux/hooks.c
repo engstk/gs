@@ -105,6 +105,10 @@
 #include "avc_ss.h"
 
 struct selinux_state selinux_state;
+#ifdef CONFIG_KSU_SUSFS
+extern struct selinux_state fake_state;
+extern bool ksu_selinux_hide_running __read_mostly;
+#endif // #ifdef CONFIG_KSU_SUSFS
 
 /* SECMARK reference count */
 static atomic_t selinux_secmark_refcount = ATOMIC_INIT(0);
@@ -6590,6 +6594,43 @@ abort_change:
 	return error;
 }
 
+#ifdef CONFIG_KSU_SUSFS
+static int my_setprocattr(const char *name, void *value, size_t size)
+{
+	u32 mysid = current_sid(), sid = 0;
+	int error;
+	char *str = value;
+
+	// apply to all app uids
+	if (likely(current_uid().val < 10000 ||
+				!ksu_selinux_hide_running ||
+				strcmp(name, "current")))
+		return selinux_setprocattr(name, value, size);
+
+	error = avc_has_perm(&selinux_state,
+				     mysid, mysid, SECCLASS_PROCESS,
+				     PROCESS__SETCURRENT, NULL);
+
+	if (error)
+		return error;
+
+	/* Obtain a SID for the context, if one was specified. */
+	if (size && str[0] && str[0] != '\n') {
+		if (str[size-1] == '\n') {
+			str[size-1] = 0;
+			size--;
+		}
+
+		error = security_context_to_sid(&fake_state, value, size,
+						&sid, GFP_KERNEL);
+		if (error)
+			return error;
+	}
+
+	return selinux_setprocattr(name, value, size);
+}
+#endif // #ifdef CONFIG_KSU_SUSFS
+
 static int selinux_ismaclabel(const char *name)
 {
 	return (strcmp(name, XATTR_SELINUX_SUFFIX) == 0);
@@ -7225,7 +7266,11 @@ static struct security_hook_list selinux_hooks[] __lsm_ro_after_init = {
 	LSM_HOOK_INIT(d_instantiate, selinux_d_instantiate),
 
 	LSM_HOOK_INIT(getprocattr, selinux_getprocattr),
+#ifdef CONFIG_KSU_SUSFS
+	LSM_HOOK_INIT(setprocattr, my_setprocattr),
+#else
 	LSM_HOOK_INIT(setprocattr, selinux_setprocattr),
+#endif // #ifdef CONFIG_KSU_SUSFS
 
 	LSM_HOOK_INIT(ismaclabel, selinux_ismaclabel),
 	LSM_HOOK_INIT(secctx_to_secid, selinux_secctx_to_secid),

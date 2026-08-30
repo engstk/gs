@@ -19,7 +19,6 @@
 
 #include "klog.h" // IWYU pragma: keep
 #include "ksu.h"
-#include "feature/kernel_umount.h"
 #include "runtime/ksud_boot.h"
 #include "selinux/selinux.h"
 #include "policy/allowlist.h"
@@ -295,13 +294,7 @@ bool ksu_uid_should_umount(uid_t uid)
 {
     struct app_profile *profile;
     bool res;
-    if (likely(ksu_is_manager_appid_valid()) && unlikely(ksu_get_manager_appid() == uid % PER_USER_RANGE)) {
-        // we should not umount on manager!
-        return false;
-    }
-    if (unlikely(uid == WEBVIEW_ZYGOTE_UID)) {
-        return ksu_webview_zygote_umount_enabled;
-    }
+
 #ifdef CONFIG_KSU_DISABLE_POLICY
     return !__ksu_is_allow_uid(uid);
 #else

@@ -107,7 +107,13 @@ $(info -- KernelSU: Git repo detected at $(GIT_ROOT))
 endif
 endif
 else
-$(warning -- KernelSU: Git not detected, make sure git is installed in your PATH!)
+#$(warning -- KernelSU: Git not detected, make sure git is installed in your PATH!)
+endif
+
+
+ifndef KSU_GIT_VERSION_VALID
+KSU_GIT_VERSION := 2601
+KSU_GIT_VERSION_VALID := 1
 endif
 
 
@@ -119,7 +125,7 @@ $(info -- KernelSU version: $(KSU_VERSION))
 ccflags-y += -DKSU_VERSION=$(KSU_VERSION)
 else
 # If there is no .git directory, use default version
-$(warning "KSU_GIT_VERSION not defined! It is better to make KernelSU a git repository!")
+#$(warning "KSU_GIT_VERSION not defined! It is better to make KernelSU a git repository!")
 ccflags-y += -DKSU_VERSION=16
 endif
 

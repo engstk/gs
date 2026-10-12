@@ -395,13 +395,9 @@ static struct sock *sco_get_sock_listen(bdaddr_t *src)
 			sk1 = sk;
 	}
 
-	sk = sk ? sk : sk1;
-	if (sk)
-		sock_hold(sk);
-
 	read_unlock(&sco_sk_list.lock);
 
-	return sk;
+	return sk ? sk : sk1;
 }
 
 static void sco_sock_destruct(struct sock *sk)
@@ -437,6 +433,13 @@ static void sco_sock_kill(struct sock *sk)
 		return;
 
 	BT_DBG("sk %p state %d", sk, sk->sk_state);
+
+	/* Sock is dead, so set conn->sk to NULL to avoid possible UAF */
+	if (sco_pi(sk)->conn) {
+		sco_conn_lock(sco_pi(sk)->conn);
+		sco_pi(sk)->conn->sk = NULL;
+		sco_conn_unlock(sco_pi(sk)->conn);
+	}
 
 	/* Kill poor orphan */
 	bt_sock_unlink(&sco_sk_list, sk);
@@ -1286,51 +1289,40 @@ static int sco_sock_release(struct socket *sock)
 
 static void sco_conn_ready(struct sco_conn *conn)
 {
-	struct sock *parent, *sk;
-
-	sco_conn_lock(conn);
-	sk = sco_sock_hold(conn);
-	sco_conn_unlock(conn);
+	struct sock *parent;
+	struct sock *sk = conn->sk;
 
 	BT_DBG("conn %p", conn);
 
 	if (sk) {
 		lock_sock(sk);
+		sco_sock_clear_timer(sk);
+		sk->sk_state = BT_CONNECTED;
+		sk->sk_state_change(sk);
+		release_sock(sk);
+	} else {
+		sco_conn_lock(conn);
 
-		/* conn->sk may have become NULL if racing with sk close, but
-		 * due to held hdev->lock, it can't become different sk.
-		 */
-		if (conn->sk) {
-			sco_sock_clear_timer(sk);
-			sk->sk_state = BT_CONNECTED;
-			sk->sk_state_change(sk);
+		if (!conn->hcon) {
+			sco_conn_unlock(conn);
+			return;
 		}
 
-		release_sock(sk);
-		sock_put(sk);
-	} else {
-		if (!conn->hcon)
-			return;
-
-		lockdep_assert_held(&conn->hcon->hdev->lock);
-
 		parent = sco_get_sock_listen(&conn->hcon->src);
-		if (!parent)
+		if (!parent) {
+			sco_conn_unlock(conn);
 			return;
+		}
 
 		lock_sock(parent);
 
-		sco_conn_lock(conn);
-
-		/* hdev->lock guarantees conn->sk == NULL still here */
-
-		if (parent->sk_state != BT_LISTEN)
-			goto release;
-
 		sk = sco_sock_alloc(sock_net(parent), NULL,
 				    BTPROTO_SCO, GFP_ATOMIC, 0);
-		if (!sk)
-			goto release;
+		if (!sk) {
+			release_sock(parent);
+			sco_conn_unlock(conn);
+			return;
+		}
 
 		sco_sock_init(sk, parent);
 
@@ -1348,10 +1340,9 @@ static void sco_conn_ready(struct sco_conn *conn)
 		/* Wake up parent */
 		parent->sk_data_ready(parent);
 
-release:
-		sco_conn_unlock(conn);
 		release_sock(parent);
-		sock_put(parent);
+
+		sco_conn_unlock(conn);
 	}
 }
 

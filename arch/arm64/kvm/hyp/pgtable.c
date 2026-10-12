@@ -431,7 +431,7 @@ static int hyp_unmap_walker(u64 addr, u64 end, u32 level, kvm_pte_t *ptep,
 		data->unmapped += granule;
 	}
 
-	__tlbi_sync_s1ish_hyp();
+	dsb(ish);
 	isb();
 	mm_ops->put_page(ptep);
 

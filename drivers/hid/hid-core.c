@@ -1348,7 +1348,12 @@ EXPORT_SYMBOL_GPL(hid_snto32);
 
 static u32 s32ton(__s32 value, unsigned n)
 {
-	s32 a = value >> (n - 1);
+	s32 a;
+	if (!value || !n)
+		return 0;
+
+	a = value >> (n - 1);
+
 	if (a && a != -1)
 		return value < 0 ? 1 << (n - 1) : (1 << (n - 1)) - 1;
 	return value & ((1 << n) - 1);
@@ -1986,13 +1991,6 @@ int __hid_report_raw_event(struct hid_device *hid, enum hid_report_type type, u8
 	size_t bsize = bufsize;
 	u8 *cdata = data;
 	int ret = 0;
-
-	if (report_enum->numbered && (size < 1 || bufsize < 1)) {
-		hid_warn_ratelimited(hid,
-				     "Event data for numbered report is too short (%d vs %zu)\n",
-				     size, bufsize);
-		return -EINVAL;
-	}
 
 	report = hid_get_report(report_enum, data);
 	if (!report)

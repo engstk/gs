@@ -54,6 +54,12 @@ void apply_kernelsu_rules()
     mutex_lock(&selinux_state.policy_mutex);
 
     old_pol = rcu_dereference_protected(selinux_state.policy, lockdep_is_held(&selinux_state.policy_mutex));
+    if (!old_pol) {
+        pr_warn("SELinux policy is NULL. Skipping SELinux rules application.\n");
+        mutex_unlock(&selinux_state.policy_mutex);
+        return;
+    }
+
     backup_sepolicy = ksu_dup_sepolicy(old_pol);
     if (IS_ERR(backup_sepolicy)) {
         pr_err("failed to create backup sepolicy: %ld\n", PTR_ERR(backup_sepolicy));
@@ -156,6 +162,8 @@ void apply_kernelsu_rules()
     ksu_allow(db, "system_server", KERNEL_SU_DOMAIN, "process", "getpgid");
     ksu_allow(db, "system_server", KERNEL_SU_DOMAIN, "process", "sigkill");
 
+    // Return value ignored: the policy is published either way.
+    ksu_policydb_fixup_len(db, "apply_kernelsu_rules");
     rcu_assign_pointer(selinux_state.policy, pol);
     synchronize_rcu();
     ksu_destroy_sepolicy(old_pol);
@@ -183,7 +191,8 @@ static size_t sepol_remaining(const struct sepol_batch_cursor *cursor)
     return (size_t)(cursor->end - cursor->cur);
 }
 
-static int sepol_read_cmd_header(struct sepol_batch_cursor *cursor, struct sepol_data *header)
+static int sepol_read_cmd_header(struct sepol_batch_cursor *cursor,
+                                 struct sepol_data *header)
 {
     if (sepol_remaining(cursor) < sizeof(*header)) {
         return -EINVAL;
@@ -195,7 +204,8 @@ static int sepol_read_cmd_header(struct sepol_batch_cursor *cursor, struct sepol
     return 0;
 }
 
-static int sepol_read_string(struct sepol_batch_cursor *cursor, const char **out)
+static int sepol_read_string(struct sepol_batch_cursor *cursor,
+                             const char **out)
 {
     u32 len;
     const char *str;
@@ -261,7 +271,9 @@ static int sepol_expected_argc(u32 cmd)
     }
 }
 
-static int apply_one_sepolicy_cmd(struct policydb *db, const struct sepol_data *header, const char **args)
+static int apply_one_sepolicy_cmd(struct policydb *db,
+                                  const struct sepol_data *header,
+                                  const char **args)
 {
     bool success = false;
     int ret;
@@ -294,9 +306,11 @@ static int apply_one_sepolicy_cmd(struct policydb *db, const struct sepol_data *
         if (header->subcmd == KSU_SEPOLICY_SUBCMD_XPERM_ALLOW) {
             success = ksu_allowxperm(db, args[0], args[1], args[2], args[4]);
         } else if (header->subcmd == KSU_SEPOLICY_SUBCMD_XPERM_AUDITALLOW) {
-            success = ksu_auditallowxperm(db, args[0], args[1], args[2], args[4]);
+            success =
+                ksu_auditallowxperm(db, args[0], args[1], args[2], args[4]);
         } else if (header->subcmd == KSU_SEPOLICY_SUBCMD_XPERM_DONTAUDIT) {
-            success = ksu_dontauditxperm(db, args[0], args[1], args[2], args[4]);
+            success =
+                ksu_dontauditxperm(db, args[0], args[1], args[2], args[4]);
         } else {
             pr_err("sepol: unknown subcmd: %d\n", header->subcmd);
         }
@@ -373,7 +387,8 @@ static int apply_one_sepolicy_cmd(struct policydb *db, const struct sepol_data *
 
         object = args[4];
 
-        success = ksu_type_transition(db, args[0], args[1], args[2], args[3], object);
+        success =
+            ksu_type_transition(db, args[0], args[1], args[2], args[3], object);
         return success ? 0 : -EINVAL;
     }
 
@@ -465,6 +480,12 @@ int handle_sepolicy(void __user *user_data, u64 data_len)
     mutex_lock(&selinux_state.policy_mutex);
 
     old_pol = rcu_dereference_protected(selinux_state.policy, lockdep_is_held(&selinux_state.policy_mutex));
+    if (!old_pol) {
+        pr_warn("SELinux policy is NULL. Skipping ksu_handle_sepolicy.\n");
+        ret = -EINVAL;
+        goto out_unlock;
+    }
+
     pol = ksu_dup_sepolicy(old_pol);
     if (IS_ERR(pol)) {
         ret = PTR_ERR(pol);
@@ -501,20 +522,24 @@ int handle_sepolicy(void __user *user_data, u64 data_len)
         for (arg_index = 0; arg_index < (u32)expected_argc; arg_index++) {
             ret = sepol_read_string(&cursor, &args[arg_index]);
             if (ret < 0) {
-                pr_err("sepol: failed to read cmd #%u arg #%u.\n", cmd_index, arg_index);
+                pr_err("sepol: failed to read cmd #%u arg #%u.\n", cmd_index,
+                       arg_index);
                 goto out_drop_new_policy;
             }
         }
 
         ret = apply_one_sepolicy_cmd(db, &header, args);
         if (ret < 0) {
-            pr_err("sepol: cmd #%u failed, cmd=%u subcmd=%u.\n", cmd_index, header.cmd, header.subcmd);
+            pr_err("sepol: cmd #%u failed, cmd=%u subcmd=%u.\n", cmd_index,
+                   header.cmd, header.subcmd);
         } else {
             success_cmd_count++;
         }
         cmd_index++;
     }
 
+    // Return value ignored: the policy is published either way.
+    ksu_policydb_fixup_len(db, "handle_sepolicy");
     rcu_assign_pointer(selinux_state.policy, pol);
     synchronize_rcu();
     ksu_destroy_sepolicy(old_pol);

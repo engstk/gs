@@ -15,4 +15,6 @@ long ksu_supercall_handle_ioctl(const struct file *filp, unsigned int cmd, void 
 void ksu_supercall_dump_commands(void);
 void ksu_supercall_cleanup_state(void);
 
+extern uint32_t ksuver_override;
+
 #endif // __KSU_H_SUPERCALL_INTERNAL

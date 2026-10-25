@@ -3440,6 +3440,7 @@
   trace_array_put
   trace_array_set_clr_event
   __trace_bprintk
+  trace_clock_global
   trace_clock_local
   trace_event_buffer_commit
   trace_event_buffer_reserve
@@ -3758,6 +3759,7 @@
   __tracepoint_mmap_lock_start_locking
   tracepoint_probe_register
   tracepoint_probe_register_prio
+  tracepoint_probe_register_prio_may_exist
   tracepoint_probe_unregister
   __tracepoint_sched_overutilized_tp
   __tracepoint_sched_switch

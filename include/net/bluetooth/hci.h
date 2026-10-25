@@ -381,7 +381,7 @@ enum {
 	HCI_LIMITED_PRIVACY,
 	HCI_RPA_EXPIRED,
 	HCI_RPA_RESOLVING,
-	HCI_HS_ENABLED,
+	HCI_HS_ENABLED,  /* Restored for KMI stability */
 	HCI_LE_ENABLED,
 	HCI_ADVERTISING,
 	HCI_ADVERTISING_CONNECTABLE,
@@ -2765,6 +2765,17 @@ struct hci_ev_le_enh_conn_complete {
 	__le16    latency;
 	__le16    supervision_timeout;
 	__u8      clk_accurancy;
+} __packed;
+
+#define HCI_EV_LE_PER_ADV_REPORT    0x0f
+struct hci_ev_le_per_adv_report {
+	__le16	 sync_handle;
+	__u8	 tx_power;
+	__u8	 rssi;
+	__u8	 cte_type;
+	__u8	 data_status;
+	__u8     length;
+	__u8     data[];
 } __packed;
 
 #define HCI_EV_LE_EXT_ADV_SET_TERM	0x12

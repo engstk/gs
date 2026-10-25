@@ -379,25 +379,31 @@ static void rb_cpu_teardown(struct hyp_rb_per_cpu *cpu_buffer)
 static bool rb_cpu_fits_backing(unsigned long nr_pages,
 			        struct hyp_buffer_page *start)
 {
-	unsigned long max = hyp_buffer_pages_backing.start +
-			    hyp_buffer_pages_backing.size;
-	struct hyp_buffer_page *end = start + nr_pages;
+	unsigned long backing_end = hyp_buffer_pages_backing.start + hyp_buffer_pages_backing.size;
+	unsigned long start_va = (unsigned long)start;
+	unsigned long max_pages;
 
-	return (unsigned long)end <= max;
+	if (!nr_pages || start_va < hyp_buffer_pages_backing.start || start_va >= backing_end)
+		return false;
+
+	max_pages = (backing_end - start_va) / sizeof(*start);
+
+	return nr_pages <= max_pages;
 }
 
 static bool rb_cpu_fits_pack(struct ring_buffer_pack *rb_pack,
 			     unsigned long pack_end)
 {
-	unsigned long *end;
+	unsigned long page_va_start = (unsigned long)&rb_pack->page_va[0];
+	unsigned long max_pages;
 
-	/* Check we can at least read nr_pages */
-	if ((unsigned long)&rb_pack->nr_pages >= pack_end)
+	/* Check we can at least read nr_pages and page_va */
+	if ((unsigned long)rb_pack >= pack_end || page_va_start > pack_end)
 		return false;
 
-	end = &rb_pack->page_va[rb_pack->nr_pages];
+	max_pages = (pack_end - page_va_start) / sizeof(unsigned long);
 
-	return (unsigned long)end <= pack_end;
+	return rb_pack->nr_pages <= max_pages;
 }
 
 static int rb_cpu_init(struct ring_buffer_pack *rb_pack, struct hyp_buffer_page *start,
@@ -433,7 +439,7 @@ static int rb_cpu_init(struct ring_buffer_pack *rb_pack, struct hyp_buffer_page 
 	}
 
 	if (ret) {
-		while (i--)
+		for (; i >= 0; i--)
 			unload_page(bpages[i].page);
 
 		return ret;
@@ -468,7 +474,7 @@ static int rb_setup_bpage_backing(struct hyp_trace_pack *pack)
 	if (hyp_buffer_pages_backing.size)
 		return -EBUSY;
 
-	if (!PAGE_ALIGNED(start) || !PAGE_ALIGNED(size))
+	if (!size || !PAGE_ALIGNED(start) || !PAGE_ALIGNED(size))
 		return -EINVAL;
 
 	ret = __pkvm_host_donate_hyp(hyp_virt_to_pfn((void *)start), size >> PAGE_SHIFT);
@@ -598,7 +604,7 @@ int __pkvm_load_tracing(unsigned long pack_hva, size_t pack_size)
 		unsigned int cpu;
 
 		ret = -EINVAL;
-		if (!rb_cpu_fits_pack(rb_pack, pack_hva + pack_size))
+		if (!rb_cpu_fits_pack(rb_pack, (unsigned long)pack + pack_size))
 			break;
 
 		cpu = rb_pack->cpu;

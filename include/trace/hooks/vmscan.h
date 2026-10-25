@@ -49,6 +49,12 @@ DECLARE_HOOK(android_vh_remove_mapping,
 DECLARE_HOOK(android_vh_remove_mapping_failed,
 	TP_PROTO(struct address_space *mapping, struct folio *folio, bool reclaimed),
 	TP_ARGS(mapping, folio, reclaimed));
+DECLARE_HOOK(android_vh_handle_folio_writeback,
+	TP_PROTO(struct folio *folio, bool *bypass),
+	TP_ARGS(folio, bypass));
+DECLARE_HOOK(android_vh_reclaim_before_kswapd,
+	TP_PROTO(unsigned long *nr_reclaimed),
+	TP_ARGS(nr_reclaimed));
 DECLARE_HOOK(android_vh_check_folio_look_around_ref,
 	TP_PROTO(struct folio *folio, int *skip),
 	TP_ARGS(folio, skip));

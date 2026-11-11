@@ -1733,6 +1733,7 @@
   drm_display_mode_from_cea_vic
   drm_edid_duplicate
   drm_edid_get_monitor_name
+  drm_edid_get_panel_id
   drm_modeset_lock_single_interruptible
   drm_object_property_set_value
   __drm_printfn_debug
@@ -2293,6 +2294,7 @@
 
 # required by rk808.ko
   devm_register_sys_off_handler
+  driver_for_each_device
   platform_device_add
   platform_device_alloc
   register_syscore_ops

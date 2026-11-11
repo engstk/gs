@@ -114,6 +114,7 @@
 
 #undef CREATE_TRACE_POINTS
 #include <trace/hooks/sched.h>
+#include <trace/hooks/mm.h>
 /*
  * Minimum number of threads to boot the kernel
  */
@@ -888,6 +889,8 @@ void __mmdrop(struct mm_struct *mm)
 	put_user_ns(mm->user_ns);
 	mm_pasid_drop(mm);
 	kfree(mm->abi_extend);
+	trace_android_vh_mmap_lock_free(&mm->mmap_lock);
+	trace_android_vh_mm_free(mm);
 	free_mm(mm);
 }
 EXPORT_SYMBOL_GPL(__mmdrop);
@@ -1158,7 +1161,7 @@ static struct task_struct *dup_task_struct(struct task_struct *orig, int node)
 
 	android_init_vendor_data(tsk, 1);
 	android_init_oem_data(tsk, 1);
-
+	android_init_dynamic_vendor_data(tsk);
 	trace_android_vh_dup_task_struct(tsk, orig);
 	return tsk;
 
@@ -1217,6 +1220,12 @@ static void mm_init_uprobes_state(struct mm_struct *mm)
 #endif
 }
 
+static void mmap_init_lock(struct mm_struct *mm)
+{
+	init_rwsem(&mm->mmap_lock);
+	trace_android_vh_mmap_lock_init(&mm->mmap_lock);
+}
+
 static struct mm_struct *mm_init(struct mm_struct *mm, struct task_struct *p,
 	struct user_namespace *user_ns)
 {
@@ -1266,6 +1275,7 @@ static struct mm_struct *mm_init(struct mm_struct *mm, struct task_struct *p,
 
 	mm->user_ns = get_user_ns(user_ns);
 	lru_gen_init_mm(mm);
+	trace_android_vh_mm_init(mm);
 	return mm;
 
 fail_nocontext:
@@ -3326,7 +3336,7 @@ static int unshare_fs(unsigned long unshare_flags, struct fs_struct **new_fsp)
 		return 0;
 
 	/* don't need lock here; in the worst case we'll do useless copy */
-	if (fs->users == 1)
+	if (!(unshare_flags & CLONE_NEWNS) && fs->users == 1)
 		return 0;
 
 	*new_fsp = copy_fs_struct(fs);

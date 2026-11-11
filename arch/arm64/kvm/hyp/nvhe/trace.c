@@ -598,7 +598,7 @@ int __pkvm_load_tracing(unsigned long pack_hva, size_t pack_size)
 		unsigned int cpu;
 
 		ret = -EINVAL;
-		if (!rb_cpu_fits_pack(rb_pack, pack_hva + pack_size))
+		if (!rb_cpu_fits_pack(rb_pack, (unsigned long)pack + pack_size))
 			break;
 
 		cpu = rb_pack->cpu;
